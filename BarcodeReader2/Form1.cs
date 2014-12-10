@@ -14,6 +14,7 @@ namespace BarcodeReader2
 {
     public partial class Form1 : Form
     {
+        // Constants defining reccommended average daily intake, and energy in kcal/kj
         private const double    SUGAR = 90,
                                 FAT = 70,
                                 SATURATES = 20,
@@ -33,6 +34,9 @@ namespace BarcodeReader2
             //String HTMLDOC = System.IO.File.ReadAllText("C:\\test.html");
             //HtmlAgilityPack.HtmlDocument hDoc = new HtmlAgilityPack.HtmlDocument();
             //hDoc.LoadHtml(HTMLDOC);
+            
+            //Testing if barcode is valid
+            //Junk variable iout, to store a required output
             double iout;
             if (textBox1.Text.Length != 13 || !double.TryParse(textBox1.Text, out iout))
             {
@@ -42,29 +46,41 @@ namespace BarcodeReader2
 
             lstatus.Text = "Loading webpage...";
 
-            // UNCOMMENT FOR RELEASE VERSION
             HtmlWeb hw = new HtmlWeb();
+            // hDoc represents the HTML of our target webpage.
             HtmlAgilityPack.HtmlDocument hDoc = hw.Load("http://www.ean-search.org/perl/ean-info.pl?ean=" + textBox1.Text);
+            
             lstatus.Text = "Ready";
+            
+            // Testing if the website works.
+            // Since the website's error page has practically no HTML, just look at the content of the first node.
             if (hDoc.DocumentNode.InnerText == "Excessive use. Please come back tomorrow.Please use the XML-API for automated access.\n")
             {
                 MessageBox.Show("Website error.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-
+            
+            //Otherwise find the first node called "title" (browser title) and get the info.
             if (hDoc.DocumentNode.SelectSingleNode("//title").InnerText == "No additional information")
             {
                 MessageBox.Show("Sorry, we don't have that product in our database.", "Error", MessageBoxButtons.OK);
                 return;
             }
 
-            // Finds the title
+            // Finds the title by finding the first node called "span", which has a parameter
+            // "data-title" which is true, and get its contents. 
+            // Since the first node with these parameters seems to always be the correct one, I don't need
+            // to cycle through all nodes that match the search conditions.
+            // e.g. <span data-title="true">Nice Cookies 150g</span>
             l_title.Text = hDoc.DocumentNode.SelectSingleNode("//span[@data-title='true']").InnerText;
 
-            // Finds the picture
+            // Finds the picture, using above.
             pictureBox1.ImageLocation = hDoc.DocumentNode.SelectSingleNode("//a[@class='toZoomImage']").GetAttributeValue("href", "");
 
-            // Find nutritional data
+            // Find nutritional data.
+            // Here we have to cycle through each table element.
+            // TryParse basically converts the value to a number from a string.
+            // If it fails it returns a zero.
             double temp = 0;
             foreach (HtmlNode hNode in hDoc.DocumentNode.SelectNodes("//th[@scope='row']"))
             {
@@ -106,6 +122,11 @@ namespace BarcodeReader2
             }
         }
 
+        // This function removes the units from the node contents.
+        // It's pretty badly done, as if the energy value string contains both kJ and kcal,
+        // it will ASSUME the kilojoule value is written first, as it will attempt to remove units by
+        // removing the kJ sign and everything after it. May have to make it more broad.
+        // If it's in kJ it will convert it to kcal and return it.
         private static string RemoveUnits(string s, bool energy)
         {
             if (energy)
